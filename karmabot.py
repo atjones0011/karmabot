@@ -1,15 +1,17 @@
 import json
 import re
+import redis
 import sys
 import time
 
 from slackclient import SlackClient
 
 
-sc = None
+sc = SlackClient(sys.argv[1])
+r = redis.StrictRedis(host='localhost', port=6379, db=0)
 
 
-def poll_client(token):
+def poll_client():
     """
     Connects to Slack and listens for new messages on channels that karmabot has joined.
     If an incoming message is of type message and is from a channel, further processing will be
@@ -25,7 +27,7 @@ def poll_client(token):
                         if msg['channel'][0] == 'C':
                             process_message(msg)
             except:
-                pass
+                sys.exc_info()[0]
 
             time.sleep(1)
     else:
@@ -43,21 +45,22 @@ def process_message(json_msg):
     The logic has been put in place, but needs to be adjusted for readability.
     ---------------------------------------------------------------------------
     """
-    regex = '^<@.+>:* *[\+-]{2}'
+    regex = '^<?@.+>?:* *[\+-]{2,6}'
     splitter_regex = '<*:* *>*'
     text = json_msg['text']
     result = re.search(regex, text)
 
     if result is not None:
         parsed_text = result.group(0)
-        user_and_amount = re.split(splitter_regex, parsed_text)
+        user_and_amount = filter(None, re.split(splitter_regex, parsed_text))
         user_list = get_users()
 
         if user_list['members'] is not None:
             for user in user_list['members']:
-                if '@' + user['id'] == user_and_amount[1]:
-                    amount = len(user_and_amount[2])
-                    if user_and_amount[2][0] == '-':
+                if ('@' + user['id'] == user_and_amount[0]
+                    or '@' + user['name'] == user_and_amount[0]):
+                    amount = len(user_and_amount[1]) - 1
+                    if user_and_amount[1][0] == '-':
                         amount = -amount
 
                     new_amount = adjust_karma(user['id'], amount)
@@ -69,18 +72,18 @@ def adjust_karma(user_id, amount):
     """
     Increments or decrements a user's karma.
     To prevent spam, the maximum adjustment allowed in a single message is 5 points.
-
-    ---------------------------------------------------------------------
-    THIS METHOD IS UNDER CONSTRUCTION.
-    The datastore and logic for adjusting karma needs to be implemented.
-    ---------------------------------------------------------------------
     """
+    curr_amount = int(r.get(user_id) or 0)
+
     if amount >= 5:
-        return 5
-    elif amount <= -5
-        return -5
-    else
-        return amount
+        new_amount = curr_amount + 5
+    elif amount <= -5:
+        new_amount = curr_amount - 5
+    else:
+        new_amount = curr_amount + amount
+
+    r.set(user_id, new_amount)
+    return new_amount
 
 
 def send_message(user_name, amount, channel):
@@ -99,7 +102,4 @@ def get_users():
 
 
 if __name__ == '__main__':
-    token = sys.argv[1]
-    sc = SlackClient(token)
-
-    poll_client(token)
+    poll_client()
