@@ -1,9 +1,10 @@
 import json
 import re
-import redis
+import subprocess
 import sys
 import time
 
+import redis
 from slackclient import SlackClient
 
 
