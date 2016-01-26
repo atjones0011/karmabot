@@ -25,7 +25,8 @@ def poll_client():
             try:
                 for msg in messages:
                     if msg['type'] == 'message':
-                        if msg['channel'][0] == 'C':
+                        if (msg['channel'][0] == 'C'
+                            or msg['channel'][0] == 'G'):
                             process_message(msg)
             except:
                 sys.exc_info()[0]
